@@ -7,12 +7,13 @@ use subtle::ConditionallySelectable;
 
 use crate::U1024;
 
-pub trait PrimeFieldConfig {
+pub trait PrimeFieldConfig: 'static + Copy + Clone + Eq + PartialEq {
     const MODULUS: U1024;
     const R2: U1024;
     const N_PRIME: U1024;
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PrimeFieldElement<C: PrimeFieldConfig> {
     value: U1024,
     _config: PhantomData<C>,
@@ -45,6 +46,35 @@ impl<C: PrimeFieldConfig> PrimeFieldElement<C> {
 
     pub fn is_zero(&self) -> bool {
         self.value == U1024::ZERO
+    }
+
+    pub fn inv(&self) -> Self {
+        let two = U1024::from(2);
+        let (p_minus_2, _) = C::MODULUS.borrowing_sub(&two);
+        self.pow(p_minus_2)
+    }
+
+    pub fn pow(&self, exp: U1024) -> Self {
+        let mut res = Self::one();
+        let mut base = *self;
+
+        for i in 0..16 {
+            let mut limb = exp.0[i];
+            for _ in 0..64 {
+                let bit = ((limb & 1) == 1) as u8;
+                let product = res * base;
+
+                res = Self::conditional_select(&product, &res, bit.into());
+                base = base.square();
+
+                limb >>= 1;
+            }
+        }
+        res
+    }
+
+    pub fn square(&self) -> Self {
+        *self * *self
     }
 
     fn reduce(lo: &U1024, hi: &U1024) -> U1024 {
@@ -123,6 +153,15 @@ impl<C: PrimeFieldConfig> Neg for PrimeFieldElement<C> {
                 value,
                 _config: PhantomData,
             }
+        }
+    }
+}
+
+impl<C: PrimeFieldConfig> ConditionallySelectable for PrimeFieldElement<C> {
+    fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+        Self {
+            value: U1024::conditional_select(&a.value, &b.value, choice),
+            _config: PhantomData,
         }
     }
 }
