@@ -13,7 +13,7 @@ pub trait PrimeFieldConfig: 'static + Copy + Clone + Eq + PartialEq {
     const N_PRIME: U1024;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PrimeFieldElement<C: PrimeFieldConfig> {
     value: U1024,
     _config: PhantomData<C>,
@@ -75,6 +75,20 @@ impl<C: PrimeFieldConfig> PrimeFieldElement<C> {
 
     pub fn square(&self) -> Self {
         *self * *self
+    }
+
+    pub fn to_u1024(&self) -> U1024 {
+        Self::reduce(&self.value, &U1024::ZERO)
+    }
+
+    pub fn to_bytes(&self) -> [u8; 128] {
+        let canonical = self.to_u1024();
+        canonical.to_be_bytes()
+    }
+
+    pub fn from_bytes(bytes: &[u8; 128]) -> Self {
+        let value = U1024::from_be_bytes(bytes);
+        Self::new(value)
     }
 
     fn reduce(lo: &U1024, hi: &U1024) -> U1024 {

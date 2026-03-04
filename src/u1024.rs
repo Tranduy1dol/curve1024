@@ -5,7 +5,7 @@ use subtle::ConditionallySelectable;
 const LIMBS: usize = 16;
 
 #[repr(align(64))]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct U1024(pub [u64; LIMBS]);
 
 impl U1024 {
@@ -14,6 +14,10 @@ impl U1024 {
     pub const ZERO: Self = Self([0; LIMBS]);
 
     pub const ONE: Self = Self([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+    pub fn is_zero(&self) -> bool {
+        *self == Self::ZERO
+    }
 
     pub fn from_hex(hex: &str) -> Self {
         let hex = hex.trim_start_matches("0x");
@@ -226,6 +230,96 @@ impl U1024 {
         let bit_idx = index % 64;
 
         (self.0[limb_idx] >> bit_idx) & 1 == 1
+    }
+
+    pub fn mod_reduce(&self, n: &Self) -> Self {
+        self.div_rem(n).1
+    }
+
+    pub fn mod_add(&self, rhs: &Self, n: &Self) -> Self {
+        let (sum, carry) = self.carrying_add(rhs);
+        let (sub_res, borrow) = sum.borrowing_sub(n);
+        let use_sub = carry || !borrow;
+        if use_sub { sub_res } else { sum }
+    }
+
+    pub fn mod_mul(&self, rhs: &Self, n: &Self) -> Self {
+        let (lo, hi) = self.widening_mul(rhs);
+        if hi == Self::ZERO {
+            return lo.mod_reduce(n);
+        }
+        // Reduce the full 2048-bit product: (2^1024 * hi + lo) mod n
+        let r = Self::pow2_1024_mod(n);
+        let hi_reduced = r.mod_mul(&hi, n);
+        lo.mod_reduce(n).mod_add(&hi_reduced, n)
+    }
+
+    pub fn mod_pow(&self, exp: &Self, n: &Self) -> Self {
+        if *n == Self::ONE {
+            return Self::ZERO;
+        }
+        let mut result = Self::ONE;
+        let mut base = self.mod_reduce(n);
+        for i in 0..LIMBS {
+            let mut limb = exp.0[i];
+            for _ in 0..64 {
+                if limb & 1 == 1 {
+                    result = result.mod_mul(&base, n);
+                }
+                base = base.mod_mul(&base, n);
+                limb >>= 1;
+            }
+        }
+        result
+    }
+
+    pub fn mod_inverse(&self, n: &Self) -> Self {
+        let two = Self::from_u64(2);
+        let (exp, _) = n.borrowing_sub(&two);
+        self.mod_pow(&exp, n)
+    }
+
+    pub fn random_below(n: &Self) -> Self {
+        use rand::RngCore;
+        let mut rng = rand::rng();
+        loop {
+            let mut limbs = [0u64; LIMBS];
+            for limb in &mut limbs {
+                *limb = rng.next_u64();
+            }
+            let val = Self(limbs).mod_reduce(n);
+            if val != Self::ZERO {
+                return val;
+            }
+        }
+    }
+
+    fn pow2_1024_mod(m: &Self) -> Self {
+        // 2^1024 mod m = (0 - m) mod m, since 0 wraps to 2^1024 in U1024
+        let (neg_m, _) = Self::ZERO.borrowing_sub(m);
+        neg_m.mod_reduce(m)
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 128] {
+        let mut res = [0; 128];
+        for (i, &limb) in self.0.iter().enumerate() {
+            let bytes = limb.to_be_bytes();
+            let offset = (LIMBS - i - 1) * 8;
+            res[offset..offset + 8].copy_from_slice(&bytes);
+        }
+        res
+    }
+
+    pub fn from_be_bytes(bytes: &[u8]) -> Self {
+        let mut res = U1024::ZERO;
+        let n = bytes.len().min(128);
+        for (i, &byte) in bytes.iter().take(n).enumerate() {
+            let bit_pos = (n - i - 1) * 8;
+            let limb_idx = bit_pos / 64;
+            let byte_idx = (bit_pos % 64) / 8;
+            res.0[limb_idx] |= (byte as u64) << (byte_idx * 8);
+        }
+        res
     }
 }
 

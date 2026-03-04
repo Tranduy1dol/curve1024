@@ -5,12 +5,14 @@ use crate::{
     prime_field::{PrimeFieldConfig as FieldConfig, PrimeFieldElement as FieldElement},
 };
 
-pub trait SWCurveConfig: 'static + Copy + Clone + Eq + PartialEq {
-    type BaseField: FieldConfig;
+pub trait SWCurveConfig: 'static + Copy + Clone + Eq + PartialEq + std::fmt::Debug {
+    type BaseField: FieldConfig + std::fmt::Debug;
 
     const COEFF_A: FieldElement<Self::BaseField>;
 
     const COEFF_B: FieldElement<Self::BaseField>;
+
+    const ORDER: U1024;
 
     #[inline]
     fn mul_by_a(element: FieldElement<Self::BaseField>) -> FieldElement<Self::BaseField> {
@@ -25,9 +27,11 @@ pub trait SWCurveConfig: 'static + Copy + Clone + Eq + PartialEq {
     fn add_b(element: FieldElement<Self::BaseField>) -> FieldElement<Self::BaseField> {
         element + Self::COEFF_B
     }
+
+    fn generator() -> AffinePoint<Self>;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AffinePoint<C: SWCurveConfig> {
     pub x: FieldElement<C::BaseField>,
     pub y: FieldElement<C::BaseField>,

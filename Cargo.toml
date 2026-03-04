@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 subtle = "2.6.1"
+sha2 = "0.10"
+rand = "0.9"
