@@ -26,29 +26,19 @@ impl<C: SWCurveConfig> SchnorrSignature<C> {
     /// 2. R = k * G
     /// 3. e = challenge_hash(R, message, n)
     /// 4. s = (k + e * private_key) mod n
-    pub fn sign(
-        private_key: &U1024,
-        message: &[u8],
-    ) -> Self {
+    pub fn sign(private_key: &U1024, message: &[u8]) -> Self {
         let k = U1024::random_below(&C::ORDER);
         let r = C::generator().mul(&k);
         let e = Self::challenge_hash(&r, message, &C::ORDER);
         let s = e.mod_mul(private_key, &C::ORDER).mod_add(&k, &C::ORDER);
-        Self {
-            r_point: r,
-            s
-        }
+        Self { r_point: r, s }
     }
 
     /// 1. e = challenge_hash(R, message, n)
     /// 2. V1 = s * G
     /// 3. V2 = R + e * public_key
     /// 4. Valid if V1 == V2
-    pub fn verify(
-        &self,
-        public_key: &AffinePoint<C>,
-        message: &[u8],
-    ) -> bool {
+    pub fn verify(&self, public_key: &AffinePoint<C>, message: &[u8]) -> bool {
         let e = Self::challenge_hash(&self.r_point, message, &C::ORDER);
         let v1 = C::generator().mul(&self.s);
         let v2 = self.r_point.add(&public_key.mul(&e));

@@ -7,3 +7,9 @@ edition = "2024"
 subtle = "2.6.1"
 sha2 = "0.10"
 rand = "0.9"
+clap = { version = "4", features = ["derive"] }
+
+[[bin]]
+name = "curve1024-sig"
+path = "src/bin/curve1024_sig.rs"
+

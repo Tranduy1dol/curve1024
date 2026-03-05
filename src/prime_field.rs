@@ -20,6 +20,11 @@ pub struct PrimeFieldElement<C: PrimeFieldConfig> {
 }
 
 impl<C: PrimeFieldConfig> PrimeFieldElement<C> {
+    pub const ZERO: Self = Self {
+        value: U1024::ZERO,
+        _config: PhantomData,
+    };
+
     pub fn new(value: U1024) -> Self {
         let (lo, hi) = value.widening_mul(&C::R2);
         let value = Self::reduce(&lo, &hi);

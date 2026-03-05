@@ -58,6 +58,6 @@ impl EcdsaSignature {
             return false;
         }
 
-        p.x.to_u1024().mod_reduce(&C::ORDER) == self.r 
+        p.x.to_u1024().mod_reduce(&C::ORDER) == self.r
     }
 }
