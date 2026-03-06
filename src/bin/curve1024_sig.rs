@@ -7,13 +7,15 @@ use curve1024::{
     SchnorrSignature, U1024,
 };
 
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Curve1024Field;
 
 impl PrimeFieldConfig for Curve1024Field {
-    const MODULUS: U1024 = U1024::ZERO;
-    const R2: U1024 = U1024::ZERO;
-    const N_PRIME: U1024 = U1024::ZERO;
+    const MODULUS: U1024 = CURVE_MODULUS;
+    const R2: U1024 = CURVE_R2;
+    const N_PRIME: U1024 = CURVE_N_PRIME;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,7 +26,7 @@ impl SWCurveConfig for Curve1024Config {
 
     const COEFF_A: PrimeFieldElement<Curve1024Field> = PrimeFieldElement::ZERO;
     const COEFF_B: PrimeFieldElement<Curve1024Field> = PrimeFieldElement::ZERO;
-    const ORDER: U1024 = U1024::ZERO;
+    const ORDER: U1024 = CURVE_ORDER;
 
     fn generator() -> AffinePoint<Self> {
         todo!("Define generator point G for Curve1024")

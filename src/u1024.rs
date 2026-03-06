@@ -2,7 +2,7 @@ use std::fmt;
 
 use subtle::ConditionallySelectable;
 
-const LIMBS: usize = 16;
+pub const LIMBS: usize = 16;
 
 #[repr(align(64))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
