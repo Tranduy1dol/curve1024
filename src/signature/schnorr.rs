@@ -39,9 +39,14 @@ impl<C: SWCurveConfig> SchnorrSignature<C> {
     /// 3. V2 = R + e * public_key
     /// 4. Valid if V1 == V2
     pub fn verify(&self, public_key: &AffinePoint<C>, message: &[u8]) -> bool {
+        if self.s >= C::ORDER {
+            return false;
+        }
+
         let e = Self::challenge_hash(&self.r_point, message, &C::ORDER);
         let v1 = C::generator().mul(&self.s);
         let v2 = self.r_point.add(&public_key.mul(&e));
+
         v1 == v2
     }
 }

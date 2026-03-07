@@ -1,6 +1,7 @@
 pub mod affine;
 pub mod keypair;
 pub mod prime_field;
+pub mod runtime_field;
 pub mod signature;
 pub mod u1024;
 

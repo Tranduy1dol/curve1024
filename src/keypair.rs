@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use std::fs;
 
 use crate::{AffinePoint, SWCurveConfig, U1024};
@@ -27,7 +30,12 @@ impl<C: SWCurveConfig> KeyPair<C> {
 
     pub fn save(&self, path: &str) -> std::io::Result<()> {
         let bytes = self.private_key.to_be_bytes();
-        fs::write(path, bytes)
+        fs::write(path, bytes)?;
+
+        #[cfg(unix)]
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+
+        Ok(())
     }
 
     pub fn load(path: &str) -> std::io::Result<Self> {

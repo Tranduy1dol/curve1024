@@ -5,7 +5,7 @@ use subtle::ConditionallySelectable;
 pub const LIMBS: usize = 16;
 
 #[repr(align(64))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct U1024(pub [u64; LIMBS]);
 
 impl U1024 {
@@ -105,16 +105,16 @@ impl U1024 {
 
             let bit = self.bit(i) as u8;
             let rem_plus_one = remainder.carrying_add(&Self::ONE).0;
-            remainder = Self::conditional_select(&rem_plus_one, &remainder, bit.into());
+            remainder = Self::conditional_select(&remainder, &rem_plus_one, bit.into());
 
             let (sub_result, borrow) = remainder.borrowing_sub(divisor);
             let should_subtract = (!borrow) as u8;
 
-            remainder = Self::conditional_select(&sub_result, &remainder, should_subtract.into());
+            remainder = Self::conditional_select(&remainder, &sub_result, should_subtract.into());
 
             let quotient_with_bit = quotient.with_bit(i);
             quotient =
-                Self::conditional_select(&quotient_with_bit, &quotient, should_subtract.into());
+                Self::conditional_select(&quotient, &quotient_with_bit, should_subtract.into());
         }
 
         (quotient, remainder)
@@ -164,13 +164,15 @@ impl U1024 {
         let mut result = [0u64; LIMBS];
 
         if bit_shift == 0 {
-            result[limb_shift..LIMBS].copy_from_slice(&self.0[..(LIMBS - limb_shift)]);
+            result[..(LIMBS - limb_shift)].copy_from_slice(&self.0[limb_shift..LIMBS]);
         } else {
-            for (i, result_limb) in result.iter_mut().enumerate().skip(limb_shift) {
-                let src_idx = i - limb_shift;
-                *result_limb = self.0[src_idx] >> bit_shift;
-                if src_idx > 0 {
-                    *result_limb |= self.0[src_idx - 1] << (64 - bit_shift);
+            for (i, r) in result.iter_mut().enumerate() {
+                let src = i + limb_shift;
+                if src < LIMBS {
+                    *r = self.0[src] >> bit_shift;
+                }
+                if src + 1 < LIMBS {
+                    *r |= self.0[src + 1] << (64 - bit_shift);
                 }
             }
         }
@@ -258,9 +260,15 @@ impl U1024 {
         if *n == Self::ONE {
             return Self::ZERO;
         }
+
+        let top_limb = (0..LIMBS)
+            .rev()
+            .find(|&i| exp.0[i] != 0)
+            .map_or(0, |i| i + 1);
+
         let mut result = Self::ONE;
         let mut base = self.mod_reduce(n);
-        for i in 0..LIMBS {
+        for i in 0..top_limb {
             let mut limb = exp.0[i];
             for _ in 0..64 {
                 if limb & 1 == 1 {
@@ -274,6 +282,7 @@ impl U1024 {
     }
 
     pub fn mod_inverse(&self, n: &Self) -> Self {
+        assert!(!self.is_zero());
         let two = Self::from_u64(2);
         let (exp, _) = n.borrowing_sub(&two);
         self.mod_pow(&exp, n)
@@ -282,20 +291,30 @@ impl U1024 {
     pub fn random_below(n: &Self) -> Self {
         use rand::RngCore;
         let mut rng = rand::rng();
+
+        let top_limb_idx = (0..LIMBS).rev().find(|&i| n.0[i] != 0).unwrap_or(0);
+        let top_bits = 64 - n.0[top_limb_idx].leading_zeros();
+        let mask = if top_bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << top_bits) - 1
+        };
+
         loop {
             let mut limbs = [0u64; LIMBS];
-            for limb in &mut limbs {
+            for limb in limbs.iter_mut().take(top_limb_idx + 1) {
                 *limb = rng.next_u64();
             }
-            let val = Self(limbs).mod_reduce(n);
-            if val != Self::ZERO {
+            limbs[top_limb_idx] &= mask;
+
+            let val = Self(limbs);
+            if val < *n && val != Self::ZERO {
                 return val;
             }
         }
     }
 
     fn pow2_1024_mod(m: &Self) -> Self {
-        // 2^1024 mod m = (0 - m) mod m, since 0 wraps to 2^1024 in U1024
         let (neg_m, _) = Self::ZERO.borrowing_sub(m);
         neg_m.mod_reduce(m)
     }
@@ -336,6 +355,24 @@ impl fmt::Display for U1024 {
 impl From<u64> for U1024 {
     fn from(value: u64) -> Self {
         U1024::from_u64(value)
+    }
+}
+
+impl PartialOrd for U1024 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for U1024 {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        for i in (0..LIMBS).rev() {
+            match self.0[i].cmp(&other.0[i]) {
+                std::cmp::Ordering::Equal => continue,
+                ord => return ord,
+            }
+        }
+        std::cmp::Ordering::Equal
     }
 }
 

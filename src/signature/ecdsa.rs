@@ -18,15 +18,24 @@ impl EcdsaSignature {
     pub fn sign<C: SWCurveConfig>(private_key: &U1024, message: &[u8]) -> Self {
         let e = hash_message(message);
 
-        let k = U1024::random_below(&C::ORDER);
-        let r_point = C::generator().mul(&k);
+        loop {
+            let k = U1024::random_below(&C::ORDER);
+            let r_point = C::generator().mul(&k);
 
-        let r = r_point.x.to_u1024().mod_reduce(&C::ORDER);
+            let r = r_point.x.to_u1024().mod_reduce(&C::ORDER);
+            if r.is_zero() {
+                continue;
+            }
 
-        let k_inv = k.mod_inverse(&C::ORDER);
-        let s =
-            (e.mod_add(&r.mod_mul(private_key, &C::ORDER), &C::ORDER)).mod_mul(&k_inv, &C::ORDER);
-        Self { r, s }
+            let k_inv = k.mod_inverse(&C::ORDER);
+            let s = (e.mod_add(&r.mod_mul(private_key, &C::ORDER), &C::ORDER))
+                .mod_mul(&k_inv, &C::ORDER);
+            if s.is_zero() {
+                continue;
+            }
+
+            return Self { r, s };
+        }
     }
 
     /// 1. Check r, s in [1, n-1]

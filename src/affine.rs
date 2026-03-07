@@ -68,7 +68,7 @@ impl<C: SWCurveConfig> AffinePoint<C> {
 
         let y2 = self.y.square();
         let x3 = self.x.square() * self.x;
-        let ax = C::mul_by_a(x3);
+        let ax = C::mul_by_a(self.x);
         let rhs = C::add_b(x3 + ax);
 
         y2 == rhs
