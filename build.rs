@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::{path::Path, env, fs};
+use std::{env, fs, path::Path};
 
 #[derive(Deserialize)]
 struct CurveConfig {
