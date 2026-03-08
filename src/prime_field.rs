@@ -15,7 +15,7 @@ pub trait PrimeFieldConfig: 'static + Copy + Clone + Eq + PartialEq {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PrimeFieldElement<C: PrimeFieldConfig> {
-    value: U1024,
+    pub value: U1024,
     _config: PhantomData<C>,
 }
 

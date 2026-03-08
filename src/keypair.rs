@@ -12,7 +12,7 @@ pub struct KeyPair<C: SWCurveConfig> {
 
 impl<C: SWCurveConfig> KeyPair<C> {
     pub fn generate() -> Self {
-        let private_key = U1024::random_below(&C::ORDER);
+        let private_key = U1024::rand(&C::ORDER);
         let public_key = C::generator().mul(&private_key);
         Self {
             private_key,

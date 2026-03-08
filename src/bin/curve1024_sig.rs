@@ -10,27 +10,38 @@ use curve1024::{
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Curve1024Field;
+struct Curve1024BaseField;
 
-impl PrimeFieldConfig for Curve1024Field {
+impl PrimeFieldConfig for Curve1024BaseField {
     const MODULUS: U1024 = CURVE_MODULUS;
     const R2: U1024 = CURVE_R2;
     const N_PRIME: U1024 = CURVE_N_PRIME;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Curve1024ScalarField;
+
+impl PrimeFieldConfig for Curve1024ScalarField {
+    const MODULUS: U1024 = CURVE_ORDER;
+    const R2: U1024 = U1024::ZERO;
+    const N_PRIME: U1024 = U1024::ZERO;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Curve1024Config;
 
 impl SWCurveConfig for Curve1024Config {
-    type BaseField = Curve1024Field;
+    type BaseField = Curve1024BaseField;
+    type ScalarField = Curve1024ScalarField;
 
-    const COEFF_A: PrimeFieldElement<Curve1024Field> = PrimeFieldElement::ZERO;
-    const COEFF_B: PrimeFieldElement<Curve1024Field> = PrimeFieldElement::ZERO;
+    const COEFF_A: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::ZERO;
+    const COEFF_B: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::ZERO;
     const ORDER: U1024 = CURVE_ORDER;
 
     fn generator() -> AffinePoint<Self> {
         todo!("Define generator point G for Curve1024")
     }
+
 }
 
 #[derive(Parser)]
@@ -205,18 +216,18 @@ fn cmd_verify(file: &PathBuf, key: &PathBuf) {
     let pub_data = fs::read(key).expect("Failed to read public key");
     assert!(pub_data.len() == 256, "Invalid public key file");
     let pub_x =
-        PrimeFieldElement::<Curve1024Field>::from_bytes(pub_data[..128].try_into().unwrap());
+        PrimeFieldElement::<Curve1024BaseField>::from_bytes(pub_data[..128].try_into().unwrap());
     let pub_y =
-        PrimeFieldElement::<Curve1024Field>::from_bytes(pub_data[128..].try_into().unwrap());
+        PrimeFieldElement::<Curve1024BaseField>::from_bytes(pub_data[128..].try_into().unwrap());
     let public_key = AffinePoint::<Curve1024Config>::new(pub_x, pub_y);
 
     // Verify
     let valid = match scheme {
         Scheme::Schnorr => {
-            let rx = PrimeFieldElement::<Curve1024Field>::from_bytes(
+            let rx = PrimeFieldElement::<Curve1024BaseField>::from_bytes(
                 sig_bytes[..128].try_into().unwrap(),
             );
-            let ry = PrimeFieldElement::<Curve1024Field>::from_bytes(
+            let ry = PrimeFieldElement::<Curve1024BaseField>::from_bytes(
                 sig_bytes[128..256].try_into().unwrap(),
             );
             let s = U1024::from_be_bytes(&sig_bytes[256..384]);

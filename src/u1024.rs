@@ -1,11 +1,12 @@
 use std::fmt;
 
+use rand::RngCore;
 use subtle::ConditionallySelectable;
 
 pub const LIMBS: usize = 16;
 
 #[repr(align(64))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct U1024(pub [u64; LIMBS]);
 
 impl U1024 {
@@ -234,62 +235,7 @@ impl U1024 {
         (self.0[limb_idx] >> bit_idx) & 1 == 1
     }
 
-    pub fn mod_reduce(&self, n: &Self) -> Self {
-        self.div_rem(n).1
-    }
-
-    pub fn mod_add(&self, rhs: &Self, n: &Self) -> Self {
-        let (sum, carry) = self.carrying_add(rhs);
-        let (sub_res, borrow) = sum.borrowing_sub(n);
-        let use_sub = carry || !borrow;
-        if use_sub { sub_res } else { sum }
-    }
-
-    pub fn mod_mul(&self, rhs: &Self, n: &Self) -> Self {
-        let (lo, hi) = self.widening_mul(rhs);
-        if hi == Self::ZERO {
-            return lo.mod_reduce(n);
-        }
-        // Reduce the full 2048-bit product: (2^1024 * hi + lo) mod n
-        let r = Self::pow2_1024_mod(n);
-        let hi_reduced = r.mod_mul(&hi, n);
-        lo.mod_reduce(n).mod_add(&hi_reduced, n)
-    }
-
-    pub fn mod_pow(&self, exp: &Self, n: &Self) -> Self {
-        if *n == Self::ONE {
-            return Self::ZERO;
-        }
-
-        let top_limb = (0..LIMBS)
-            .rev()
-            .find(|&i| exp.0[i] != 0)
-            .map_or(0, |i| i + 1);
-
-        let mut result = Self::ONE;
-        let mut base = self.mod_reduce(n);
-        for i in 0..top_limb {
-            let mut limb = exp.0[i];
-            for _ in 0..64 {
-                if limb & 1 == 1 {
-                    result = result.mod_mul(&base, n);
-                }
-                base = base.mod_mul(&base, n);
-                limb >>= 1;
-            }
-        }
-        result
-    }
-
-    pub fn mod_inverse(&self, n: &Self) -> Self {
-        assert!(!self.is_zero());
-        let two = Self::from_u64(2);
-        let (exp, _) = n.borrowing_sub(&two);
-        self.mod_pow(&exp, n)
-    }
-
-    pub fn random_below(n: &Self) -> Self {
-        use rand::RngCore;
+    pub fn rand(n: &Self) -> Self {
         let mut rng = rand::rng();
 
         let top_limb_idx = (0..LIMBS).rev().find(|&i| n.0[i] != 0).unwrap_or(0);
@@ -312,11 +258,6 @@ impl U1024 {
                 return val;
             }
         }
-    }
-
-    fn pow2_1024_mod(m: &Self) -> Self {
-        let (neg_m, _) = Self::ZERO.borrowing_sub(m);
-        neg_m.mod_reduce(m)
     }
 
     pub fn to_be_bytes(&self) -> [u8; 128] {

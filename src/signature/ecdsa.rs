@@ -1,5 +1,4 @@
-use crate::U1024;
-use crate::affine::{AffinePoint, SWCurveConfig};
+use crate::{AffinePoint, PrimeFieldElement, SWCurveConfig, U1024};
 
 use super::hash_message;
 
@@ -16,25 +15,18 @@ impl EcdsaSignature {
     /// 4. e = hash_message(message)
     /// 5. s = k^{-1} * (e + r * private_key) mod n (retry if s == 0)
     pub fn sign<C: SWCurveConfig>(private_key: &U1024, message: &[u8]) -> Self {
-        let e = hash_message(message);
+        let k = U1024::rand(&C::ORDER);
+        let r_point = C::generator().mul(&k);
 
-        loop {
-            let k = U1024::random_below(&C::ORDER);
-            let r_point = C::generator().mul(&k);
+        let e = PrimeFieldElement::<C::ScalarField>::new(hash_message(message));
+        let r = PrimeFieldElement::<C::ScalarField>::new(r_point.x.to_u1024());
+        let k_inv = PrimeFieldElement::<C::ScalarField>::new(k).inv();
+        let private_key = PrimeFieldElement::<C::ScalarField>::new(*private_key);
 
-            let r = r_point.x.to_u1024().mod_reduce(&C::ORDER);
-            if r.is_zero() {
-                continue;
-            }
-
-            let k_inv = k.mod_inverse(&C::ORDER);
-            let s = (e.mod_add(&r.mod_mul(private_key, &C::ORDER), &C::ORDER))
-                .mod_mul(&k_inv, &C::ORDER);
-            if s.is_zero() {
-                continue;
-            }
-
-            return Self { r, s };
+        let s = k_inv * (e + r * private_key);
+        Self {
+            r: r.value,
+            s: s.value,
         }
     }
 
@@ -53,20 +45,21 @@ impl EcdsaSignature {
             return false;
         }
 
-        let e = hash_message(message);
+        let e = PrimeFieldElement::<C::ScalarField>::new(hash_message(message));
+        let w = PrimeFieldElement::<C::ScalarField>::new(self.s).inv();
+        let r = PrimeFieldElement::<C::ScalarField>::new(self.r);
 
-        let w = self.s.mod_inverse(&C::ORDER);
-        let u1 = e.mod_mul(&w, &C::ORDER);
-        let u2 = self.r.mod_mul(&w, &C::ORDER);
+        let u1 = e * w;
+        let u2 = r * w;
 
-        let u1_g = C::generator().mul(&u1);
-        let u2_pub = public_key.mul(&u2);
+        let u1_g = C::generator().mul(&u1.value);
+        let u2_pub = public_key.mul(&u2.value);
         let p = u1_g.add(&u2_pub);
 
         if p.is_infinite {
             return false;
         }
 
-        p.x.to_u1024().mod_reduce(&C::ORDER) == self.r
+        PrimeFieldElement::<C::ScalarField>::new(p.x.value).value == self.r
     }
 }

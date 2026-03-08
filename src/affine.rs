@@ -8,6 +8,8 @@ use crate::{
 pub trait SWCurveConfig: 'static + Copy + Clone + Eq + PartialEq + std::fmt::Debug {
     type BaseField: FieldConfig + std::fmt::Debug;
 
+    type ScalarField: FieldConfig;
+
     const COEFF_A: FieldElement<Self::BaseField>;
 
     const COEFF_B: FieldElement<Self::BaseField>;
