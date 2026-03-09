@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, time::Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -8,41 +12,6 @@ use curve1024::{
 };
 
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Curve1024BaseField;
-
-impl PrimeFieldConfig for Curve1024BaseField {
-    const MODULUS: U1024 = CURVE_MODULUS;
-    const R2: U1024 = CURVE_R2;
-    const N_PRIME: U1024 = CURVE_N_PRIME;
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Curve1024ScalarField;
-
-impl PrimeFieldConfig for Curve1024ScalarField {
-    const MODULUS: U1024 = CURVE_ORDER;
-    const R2: U1024 = U1024::ZERO;
-    const N_PRIME: U1024 = U1024::ZERO;
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Curve1024Config;
-
-impl SWCurveConfig for Curve1024Config {
-    type BaseField = Curve1024BaseField;
-    type ScalarField = Curve1024ScalarField;
-
-    const COEFF_A: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::ZERO;
-    const COEFF_B: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::ZERO;
-    const ORDER: U1024 = CURVE_ORDER;
-
-    fn generator() -> AffinePoint<Self> {
-        todo!("Define generator point G for Curve1024")
-    }
-
-}
 
 #[derive(Parser)]
 #[command(name = "curve1024-sig")]
@@ -136,7 +105,7 @@ fn main() {
     }
 }
 
-fn cmd_keygen(output: &PathBuf) {
+fn cmd_keygen(output: &Path) {
     let start = Instant::now();
     let keypair = KeyPair::<Curve1024Config>::generate();
 
@@ -156,7 +125,7 @@ fn cmd_keygen(output: &PathBuf) {
     println!("Public key saved to {:?}", pub_path.to_str())
 }
 
-fn cmd_sign(file: &PathBuf, key: &PathBuf, scheme: &Scheme) {
+fn cmd_sign(file: &Path, key: &Path, scheme: &Scheme) {
     let start = Instant::now();
 
     let message = fs::read(file).expect("Failed to read file");
@@ -189,7 +158,7 @@ fn cmd_sign(file: &PathBuf, key: &PathBuf, scheme: &Scheme) {
     println!("Signed in {:.2?}", start.elapsed());
 }
 
-fn cmd_verify(file: &PathBuf, key: &PathBuf) {
+fn cmd_verify(file: &Path, key: &Path) {
     let start = Instant::now();
     let data = fs::read(file).expect("Failed to read file");
     let len = data.len();
@@ -251,7 +220,7 @@ fn cmd_verify(file: &PathBuf, key: &PathBuf) {
     }
 }
 
-fn cmd_export_pub(key: &PathBuf, output: &PathBuf) {
+fn cmd_export_pub(key: &Path, output: &Path) {
     let start = Instant::now();
     let keypair = KeyPair::<Curve1024Config>::load(key.to_str().expect("Key path not valid"))
         .expect("Failed to load private key");

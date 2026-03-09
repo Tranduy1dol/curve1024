@@ -16,4 +16,3 @@ pub fn hash_message(message: &[u8]) -> U1024 {
     }
     U1024::from_be_bytes(&buf)
 }
-

@@ -25,6 +25,13 @@ impl<C: PrimeFieldConfig> PrimeFieldElement<C> {
         _config: PhantomData,
     };
 
+    pub const fn from_montgomery(value: U1024) -> Self {
+        Self {
+            value,
+            _config: PhantomData,
+        }
+    }
+
     pub fn new(value: U1024) -> Self {
         let (lo, hi) = value.widening_mul(&C::R2);
         let value = Self::reduce(&lo, &hi);
