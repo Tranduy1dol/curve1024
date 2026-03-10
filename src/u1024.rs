@@ -329,3 +329,63 @@ impl ConditionallySelectable for U1024 {
         res
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basics() {
+        let zero = U1024::ZERO;
+        let one = U1024::ONE;
+        assert!(zero.is_zero());
+        assert!(!one.is_zero());
+
+        let a = U1024::from_u64(42);
+        let b = U1024::from_hex("2a");
+        assert_eq!(a, b);
+        assert!(a > zero);
+        assert!(one < a);
+    }
+
+    #[test]
+    fn test_arithmetic() {
+        let a = U1024::from_u64(10);
+        let b = U1024::from_u64(3);
+
+        let (add, carry) = a.carrying_add(&b);
+        assert_eq!(add, U1024::from_u64(13));
+        assert!(!carry);
+
+        let (sub, borrow) = a.borrowing_sub(&b);
+        assert_eq!(sub, U1024::from_u64(7));
+        assert!(!borrow);
+
+        let (mul_low, mul_high) = a.widening_mul(&b);
+        assert_eq!(mul_low, U1024::from_u64(30));
+        assert!(mul_high.is_zero());
+
+        let (q, r) = a.div_rem(&b);
+        assert_eq!(q, U1024::from_u64(3));
+        assert_eq!(r, U1024::from_u64(1));
+    }
+
+    #[test]
+    fn test_shifts() {
+        let a = U1024::from_u64(2);
+        assert_eq!(a.shl(1), U1024::from_u64(4));
+        assert_eq!(a.shr(1), U1024::ONE);
+    }
+
+    #[test]
+    fn test_bytes_and_rand() {
+        let a = U1024::from_u64(0x1234abcd);
+        let bytes = a.to_be_bytes();
+        let b = U1024::from_be_bytes(&bytes);
+        assert_eq!(a, b);
+
+        let bound = U1024::from_u64(100);
+        let r = U1024::rand(&bound);
+        assert!(r < bound);
+    }
+}

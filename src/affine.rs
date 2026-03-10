@@ -100,6 +100,10 @@ impl<C: SWCurveConfig> AffinePoint<C> {
             return Self::infinite();
         }
 
+        if *self == *rhs {
+            return self.double();
+        }
+
         let num = rhs.y - self.y;
         let den = rhs.x - self.x;
         let lambda = num * den.inv();
@@ -142,5 +146,123 @@ impl<C: SWCurveConfig> AffinePoint<C> {
         }
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prime_field::{PrimeFieldConfig, PrimeFieldElement};
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct TestBase;
+
+    // p = 17. R = 1 mod 17.
+    impl PrimeFieldConfig for TestBase {
+        const MODULUS: U1024 = U1024([17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        const R2: U1024 = U1024::ONE;
+        const N_PRIME: U1024 = U1024([0x0f0f0f0f0f0f0f0f; 16]);
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct TestScalar;
+    // Curve order = 19
+    impl PrimeFieldConfig for TestScalar {
+        const MODULUS: U1024 = U1024([19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        const R2: U1024 = U1024::ONE;
+        const N_PRIME: U1024 = U1024([0x0f0f0f0f0f0f0f0f; 16]);
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct TestCurve;
+
+    // y^2 = x^3 + 2x + 2 mod 17
+    impl SWCurveConfig for TestCurve {
+        type BaseField = TestBase;
+        type ScalarField = TestScalar;
+
+        const COEFF_A: PrimeFieldElement<Self::BaseField> =
+            PrimeFieldElement::from_montgomery(U1024([
+                2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]));
+        const COEFF_B: PrimeFieldElement<Self::BaseField> =
+            PrimeFieldElement::from_montgomery(U1024([
+                2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]));
+        const ORDER: U1024 = U1024([19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+        fn generator() -> AffinePoint<Self> {
+            AffinePoint::new(
+                PrimeFieldElement::from_montgomery(U1024([
+                    5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ])),
+                PrimeFieldElement::from_montgomery(U1024([
+                    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ])),
+            )
+        }
+    }
+
+    type P = AffinePoint<TestCurve>;
+    type F = PrimeFieldElement<TestBase>;
+
+    #[test]
+    fn test_curve_point() {
+        let generator = TestCurve::generator();
+        assert!(generator.is_on_curve());
+        assert!(!generator.is_infinite);
+
+        let inf = P::infinite();
+        assert!(inf.is_infinite);
+        assert!(inf.is_on_curve());
+    }
+
+    #[test]
+    fn test_point_addition() {
+        let p = TestCurve::generator();
+
+        let p2_add = p.add(&p);
+        let p2_double = p.double();
+        assert_eq!(p2_add, p2_double, "P + P should equal 2P");
+
+        // 2P = (6, 3) analytically computed
+        let expected_p2 = P::new(F::new(U1024::from_u64(6)), F::new(U1024::from_u64(3)));
+        assert_eq!(p2_double, expected_p2);
+
+        let inf = P::infinite();
+        assert_eq!(p.add(&inf), p);
+        assert_eq!(inf.add(&p), p);
+        assert_eq!(p.add(&p.neg()), inf);
+    }
+
+    #[test]
+    fn test_point_multiplication() {
+        let p = TestCurve::generator();
+
+        // P * 2 = 2P
+        let p2_mul = p.mul(&U1024::from_u64(2));
+        assert_eq!(p2_mul, p.double());
+
+        // P * order = Inf
+        let p_order = p.mul(&TestCurve::ORDER);
+        assert!(p_order.is_infinite);
+
+        // P * 1 = P
+        assert_eq!(p.mul(&U1024::ONE), p);
+
+        // P * 0 = Inf
+        assert!(p.mul(&U1024::ZERO).is_infinite);
+    }
+
+    #[test]
+    fn test_negation() {
+        let p = TestCurve::generator();
+        let neg_p = p.neg();
+        assert_eq!(neg_p.x, p.x);
+        assert_eq!(neg_p.y, -p.y);
+        assert!(neg_p.is_on_curve());
+
+        let inf = P::infinite();
+        assert_eq!(inf.neg(), inf);
     }
 }
