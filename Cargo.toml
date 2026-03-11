@@ -22,3 +22,9 @@ num-bigint = "0.4"
 num-traits = "0.2"
 num-integer = "0.1"
 
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "signature_bench"
+harness = false
