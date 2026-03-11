@@ -7,11 +7,9 @@ use std::{
 use clap::{Parser, Subcommand, ValueEnum};
 
 use curve1024::{
-    AffinePoint, EcdsaSignature, KeyPair, PrimeFieldConfig, PrimeFieldElement, SWCurveConfig,
+    AffinePoint, Curve1024BaseField, Curve1024Config, EcdsaSignature, KeyPair, PrimeFieldElement,
     SchnorrSignature, U1024,
 };
-
-include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 #[derive(Parser)]
 #[command(name = "curve1024-sig")]

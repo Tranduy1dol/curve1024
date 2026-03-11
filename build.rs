@@ -163,6 +163,22 @@ fn main() {
     let r2 = U1024::from_hex(&format!("{r2_biguint:x}"));
     let n_prime = U1024::from_hex(&format!("{n_prime_biguint:x}"));
 
+    // Compute R2 and N_PRIME for the scalar field (curve order)
+    let order_biguint =
+        BigUint::parse_bytes(field_cfg.order.trim_start_matches("0x").as_bytes(), 16)
+            .unwrap_or(BigUint::ZERO);
+    let order_r2_biguint = (&r_biguint * &r_biguint) % &order_biguint;
+    let order_bigint = BigInt::from_biguint(Sign::Plus, order_biguint.clone());
+    let ext_gcd_order = order_bigint.extended_gcd(&r_bigint);
+    let mut order_n_prime_bigint = (-ext_gcd_order.x) % &r_bigint;
+    if order_n_prime_bigint < BigInt::from(0) {
+        order_n_prime_bigint += &r_bigint;
+    }
+    let order_n_prime_biguint = order_n_prime_bigint.to_biguint().unwrap();
+
+    let order_r2 = U1024::from_hex(&format!("{order_r2_biguint:x}"));
+    let order_n_prime = U1024::from_hex(&format!("{order_n_prime_biguint:x}"));
+
     let code = format!(
         r#"// Auto-generated from curve1024.toml — do not edit manually
 
@@ -179,42 +195,9 @@ pub const CURVE_GENERATOR_Y: U1024 = {gy};
 pub const CURVE_R2: U1024 = {r2};
 pub const CURVE_N_PRIME: U1024 = {n_prime};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Curve1024BaseField;
-
-impl PrimeFieldConfig for Curve1024BaseField {{
-    const MODULUS: U1024 = CURVE_MODULUS;
-    const R2: U1024 = CURVE_R2;
-    const N_PRIME: U1024 = CURVE_N_PRIME;
-}}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Curve1024ScalarField;
-
-impl PrimeFieldConfig for Curve1024ScalarField {{
-    const MODULUS: U1024 = CURVE_ORDER;
-    const R2: U1024 = U1024::ZERO;
-    const N_PRIME: U1024 = U1024::ZERO;
-}}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Curve1024Config;
-
-impl SWCurveConfig for Curve1024Config {{
-    type BaseField = Curve1024BaseField;
-    type ScalarField = Curve1024ScalarField;
-
-    const COEFF_A: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::from_montgomery(CURVE_A);
-    const COEFF_B: PrimeFieldElement<Curve1024BaseField> = PrimeFieldElement::from_montgomery(CURVE_B);
-    const ORDER: U1024 = CURVE_ORDER;
-
-    fn generator() -> AffinePoint<Self> {{
-        AffinePoint::new(
-            PrimeFieldElement::from_montgomery(CURVE_GENERATOR_X),
-            PrimeFieldElement::from_montgomery(CURVE_GENERATOR_Y),
-        )
-    }}
-}}
+// Computed from CURVE_ORDER (for scalar field Montgomery arithmetic)
+pub const CURVE_ORDER_R2: U1024 = {order_r2};
+pub const CURVE_ORDER_N_PRIME: U1024 = {order_n_prime};
 "#,
         modulus = modulus,
         order = order,
@@ -224,6 +207,8 @@ impl SWCurveConfig for Curve1024Config {{
         gy = gy,
         r2 = r2,
         n_prime = n_prime,
+        order_r2 = order_r2,
+        order_n_prime = order_n_prime,
     );
 
     fs::write(&dest, code).expect("Failed to write constants.rs");
