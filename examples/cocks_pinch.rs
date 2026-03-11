@@ -205,6 +205,16 @@ fn apply_lift(base: &U1024, r: &U1024, h: i32) -> U1024 {
     }
 }
 
+/// Returns the largest s such that 2^s divides n.
+fn two_adicity(n: &U1024) -> u32 {
+    for limb_idx in 0..LIMBS {
+        if n.0[limb_idx] != 0 {
+            return (limb_idx as u32) * 64 + n.0[limb_idx].trailing_zeros();
+        }
+    }
+    1024
+}
+
 fn try_lift_to_prime(
     k: u64,
     d: &U1024,
@@ -220,7 +230,6 @@ fn try_lift_to_prime(
             let t = apply_lift(t0, r, ht);
             let y = apply_lift(y0, r, hy);
 
-            // Compute t² + D·y² in 2048 bits
             let t_sq = t.widening_mul(&t);
             let y_sq = y.widening_mul(&y);
 
@@ -231,7 +240,6 @@ fn try_lift_to_prime(
 
             let numerator = add_2048((&t_sq.0, &t_sq.1), (&d_y_sq.0, &d_y_sq.1));
 
-            // p = numerator / 4, must be divisible
             if numerator.0.0[0] & 3 != 0 {
                 continue;
             }
@@ -296,16 +304,29 @@ fn cocks_pinch(
     d: &U1024,
     target_r_bits: usize,
     target_p_bits: usize,
+    min_scalar_two_adicity: u32,
     max_attempts: u64,
 ) -> Option<CurveParams> {
     let (t_min, t_max) = find_t_range(target_r_bits);
-    let t_range = t_max.borrowing_sub(&t_min).0;
+
+    let t_align = min_scalar_two_adicity.div_ceil(3);
+    let step = U1024::ONE.shl(t_align as usize);
+    let t_base = {
+        let rem = t_min.div_rem(&step).1;
+        if rem.is_zero() {
+            t_min
+        } else {
+            t_min.carrying_add(&step).0.borrowing_sub(&rem).0
+        }
+    };
+    let t_steps = t_max.borrowing_sub(&t_base).0.div_rem(&step).0;
 
     for attempt in 0..max_attempts {
         let timer = std::time::Instant::now();
 
-        // Pick random T in valid range and evaluate Φ_k(T)
-        let t_val = t_min.carrying_add(&U1024::rand(&t_range)).0;
+        let t_val = t_base
+            .carrying_add(&U1024::rand(&t_steps).widening_mul(&step).0)
+            .0;
         let r = cyclotomic_phi18(&t_val);
 
         if bit_length(&r) != target_r_bits {
@@ -319,12 +340,12 @@ fn cocks_pinch(
         }
 
         println!(
-            "[attempt {attempt}] Found prime r ({} bits), {:.2?}",
+            "[attempt {attempt}] Found prime r ({} bits, two-adicity={}), {:.2?}",
             bit_length(&r),
+            two_adicity(&r.borrowing_sub(&U1024::ONE).0),
             timer.elapsed()
         );
 
-        // Compute sqrt(-D) mod r
         let neg_d = r.borrowing_sub(d).0;
         let sqrt_neg_d = match sqrt_mod(&neg_d, &r) {
             Some(v) => v,
@@ -341,7 +362,6 @@ fn cocks_pinch(
                 continue;
             }
 
-            // t₀ = T^i + 1 (mod r),  y₀ = (t₀ - 2) / sqrt(-D) (mod r)
             let t0 = r_field.add(&r_field.pow(&t_val, &U1024::from(i)), &U1024::ONE);
             let t0_minus_2 = t0.borrowing_sub(&U1024::from(2)).0;
             let y0 = r_field.mul(&t0_minus_2, &r_field.inv(&sqrt_neg_d));
@@ -370,16 +390,30 @@ fn main() {
     let target_p_bits = 1024;
     let max_attempts = 100_000u64;
 
+    let min_scalar_two_adicity = 32u32;
+
     println!("k={k}, D={d}, target: r~{target_r_bits} bits, p~{target_p_bits} bits");
+    println!("Scalar field NTT two-adicity >= {min_scalar_two_adicity}");
     println!("Max attempts: {max_attempts}\n");
 
     let start = std::time::Instant::now();
 
-    match cocks_pinch(k, &d, target_r_bits, target_p_bits, max_attempts) {
+    match cocks_pinch(
+        k,
+        &d,
+        target_r_bits,
+        target_p_bits,
+        min_scalar_two_adicity,
+        max_attempts,
+    ) {
         Some(params) => {
+            let r_two_adicity = two_adicity(&params.r.borrowing_sub(&U1024::ONE).0);
             println!("Found pairing-friendly curve!");
             println!("  p = {} ({} bits)", params.p, bit_length(&params.p));
             println!("  r = {} ({} bits)", params.r, bit_length(&params.r));
+            println!(
+                "  r two-adicity: 2^{r_two_adicity} | (r-1)  (NTT up to degree 2^{r_two_adicity})"
+            );
             println!("  t = {}", params.t);
             println!("  y = {}", params.y);
             println!("  k = {}", params.k);
