@@ -215,20 +215,28 @@ fn two_adicity(n: &U1024) -> u32 {
     1024
 }
 
-fn try_lift_to_prime(
-    k: u64,
-    d: &U1024,
-    r: &U1024,
-    t0: &U1024,
-    y0: &U1024,
+struct LiftParams<'a> {
+    t0: &'a U1024,
+    y0: &'a U1024,
     target_p_bits: usize,
-) -> Option<CurveParams> {
-    let d_small = d.0[0];
+    /// Minimum two-adicity of p - 1  (p = d·2^x + 1 form)
+    min_base_two_adicity: u32,
+    /// Actual two-adicity of r - 1; controls how far ht·r shifts bits of p.
+    r_two_adicity: u32,
+}
 
-    for ht in -20i32..=20 {
-        for hy in -20i32..=20 {
-            let t = apply_lift(t0, r, ht);
-            let y = apply_lift(y0, r, hy);
+fn try_lift_to_prime(k: u64, d: &U1024, r: &U1024, lp: &LiftParams<'_>) -> Option<CurveParams> {
+    let d_small = d.0[0];
+    let extra = lp
+        .min_base_two_adicity
+        .saturating_sub(lp.r_two_adicity)
+        .min(10);
+    let half_range = 20i64 + (1i64 << extra);
+
+    for ht in -half_range..=half_range {
+        for hy in -half_range..=half_range {
+            let t = apply_lift(lp.t0, r, ht as i32);
+            let y = apply_lift(lp.y0, r, hy as i32);
 
             let t_sq = t.widening_mul(&t);
             let y_sq = y.widening_mul(&y);
@@ -245,7 +253,11 @@ fn try_lift_to_prime(
             }
 
             let (p, p_hi) = shr_2048(&numerator.0, &numerator.1, 2);
-            if p_hi != U1024::ZERO || bit_length(&p) != target_p_bits {
+            if p_hi != U1024::ZERO || bit_length(&p) != lp.target_p_bits {
+                continue;
+            }
+
+            if two_adicity(&p.borrowing_sub(&U1024::ONE).0) < lp.min_base_two_adicity {
                 continue;
             }
 
@@ -305,12 +317,17 @@ fn cocks_pinch(
     target_r_bits: usize,
     target_p_bits: usize,
     min_scalar_two_adicity: u32,
+    min_base_two_adicity: u32,
     max_attempts: u64,
 ) -> Option<CurveParams> {
     let (t_min, t_max) = find_t_range(target_r_bits);
 
+    // r = T^6 - T^3 + 1, so r - 1 = T^3(T^3 - 1).
+    // If T ≡ 0 (mod 2^k), then two_adicity(r-1) = 3k.
+    // => align T to multiples of 2^ceil(s/3) to guarantee two_adicity(r-1) >= s.
     let t_align = min_scalar_two_adicity.div_ceil(3);
     let step = U1024::ONE.shl(t_align as usize);
+    // Snap t_min up to the next multiple of step
     let t_base = {
         let rem = t_min.div_rem(&step).1;
         if rem.is_zero() {
@@ -324,6 +341,7 @@ fn cocks_pinch(
     for attempt in 0..max_attempts {
         let timer = std::time::Instant::now();
 
+        // Pick a random multiple of `step` in [t_base, t_max]
         let t_val = t_base
             .carrying_add(&U1024::rand(&t_steps).widening_mul(&step).0)
             .0;
@@ -339,10 +357,11 @@ fn cocks_pinch(
             continue;
         }
 
+        let r_two_adicity = two_adicity(&r.borrowing_sub(&U1024::ONE).0);
         println!(
             "[attempt {attempt}] Found prime r ({} bits, two-adicity={}), {:.2?}",
             bit_length(&r),
-            two_adicity(&r.borrowing_sub(&U1024::ONE).0),
+            r_two_adicity,
             timer.elapsed()
         );
 
@@ -366,7 +385,18 @@ fn cocks_pinch(
             let t0_minus_2 = t0.borrowing_sub(&U1024::from(2)).0;
             let y0 = r_field.mul(&t0_minus_2, &r_field.inv(&sqrt_neg_d));
 
-            if let Some(params) = try_lift_to_prime(k, d, &r, &t0, &y0, target_p_bits) {
+            if let Some(params) = try_lift_to_prime(
+                k,
+                d,
+                &r,
+                &LiftParams {
+                    t0: &t0,
+                    y0: &y0,
+                    target_p_bits,
+                    min_base_two_adicity,
+                    r_two_adicity,
+                },
+            ) {
                 println!("[attempt {attempt}] SUCCESS, {:.2?}", timer.elapsed());
                 return Some(params);
             }
@@ -389,11 +419,12 @@ fn main() {
     let target_r_bits = 512;
     let target_p_bits = 1024;
     let max_attempts = 100_000u64;
-
     let min_scalar_two_adicity = 32u32;
+    let min_base_two_adicity = 32u32;
 
     println!("k={k}, D={d}, target: r~{target_r_bits} bits, p~{target_p_bits} bits");
     println!("Scalar field NTT two-adicity >= {min_scalar_two_adicity}");
+    println!("Base field NTT two-adicity   >= {min_base_two_adicity}");
     println!("Max attempts: {max_attempts}\n");
 
     let start = std::time::Instant::now();
@@ -404,16 +435,17 @@ fn main() {
         target_r_bits,
         target_p_bits,
         min_scalar_two_adicity,
+        min_base_two_adicity,
         max_attempts,
     ) {
         Some(params) => {
-            let r_two_adicity = two_adicity(&params.r.borrowing_sub(&U1024::ONE).0);
+            let r_adicity = two_adicity(&params.r.borrowing_sub(&U1024::ONE).0);
+            let p_adicity = two_adicity(&params.p.borrowing_sub(&U1024::ONE).0);
             println!("Found pairing-friendly curve!");
             println!("  p = {} ({} bits)", params.p, bit_length(&params.p));
+            println!("  p two-adicity: 2^{p_adicity} | (p-1)");
             println!("  r = {} ({} bits)", params.r, bit_length(&params.r));
-            println!(
-                "  r two-adicity: 2^{r_two_adicity} | (r-1)  (NTT up to degree 2^{r_two_adicity})"
-            );
+            println!("  r two-adicity: 2^{r_adicity} | (r-1)");
             println!("  t = {}", params.t);
             println!("  y = {}", params.y);
             println!("  k = {}", params.k);
