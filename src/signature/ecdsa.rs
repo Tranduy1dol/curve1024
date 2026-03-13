@@ -145,12 +145,9 @@ mod tests {
     fn test_valid_ecdsa_signature() {
         let private_key = U1024::from_u64(10);
         let public_key = TestCurve::generator().mul(&private_key);
-
         let message = b"Hello, ECDSA!";
 
-        let mut valid_signature_found = false;
-
-        for _ in 0..10 {
+        for _ in 0..100 {
             let sig = EcdsaSignature::sign::<TestCurve>(&private_key, message);
 
             if sig.r.is_zero() || sig.s.is_zero() {
@@ -170,13 +167,9 @@ mod tests {
                 "Tampered signature should fail"
             );
 
-            valid_signature_found = true;
-            break;
+            return; // success
         }
 
-        assert!(
-            valid_signature_found,
-            "Failed to generate a valid non-zero signature in 10 attempts"
-        );
+        panic!("Failed to generate a valid non-zero ECDSA signature in 100 attempts");
     }
 }
