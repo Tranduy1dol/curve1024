@@ -14,7 +14,7 @@ A complete, from-scratch **1024-bit Elliptic Curve Cryptography (ECC)** library 
 - **Robust Attack Resistance**:
   - **Pollard's rho / ECDLP**: Requires $O(2^{256})$ operations (absolute margin against classical computing limits).
   - **MOV Attack**: The extension field $\mathbb{F}_{p^{18}}$ is a massive 18,432 bits, making index-calculus DLP completely infeasible.
-  - **Anomalous (SSSA) Attack**: Curve cardinality is rigorously checked ($\#E(\mathbb{F}_p) \neq p$).
+  - **Anomalous (SSSA) Attack**: Curve cardinality is rigorously checked ($\\#E(\mathbb{F}_p) \neq p$).
   - **TNFS Attack Resistance**: Ensures NTT-friendly base and scalar fields.
 
 ## 📐 Mathematical Specifications
