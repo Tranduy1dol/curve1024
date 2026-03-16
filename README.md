@@ -3,66 +3,98 @@
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A complete, from-scratch **1024-bit Elliptic Curve Cryptography (ECC)** library written purely in Rust. Designed with cryptographic sovereignty and memory safety in mind, Curve1024 relies on zero external cryptographic dependencies. It provides a massive 256-bit security margin, targeting high-security, long-term, and offline signing scenarios.
+## Introduce
 
-## 🌟 Key Features
+**Curve1024** is a complete, from-scratch **1024-bit Elliptic Curve Cryptography (ECC)** library written purely in Rust. Designed with cryptographic sovereignty and memory safety at its core, Curve1024 relies on zero external cryptographic dependencies. 
 
-- **Pure-Rust 1024-bit BigNum Arithmetic (`U1024`)**: Custom, memory-safe large integer operations over 1024-bit fields, circumventing vulnerabilities inherent in legacy C/C++ bignum implementations.
-- **Novel KSS18 Pairing-Friendly Curve**: Synthesized via an improved Cocks-Pinch algorithm. Features an embedding degree $k=18$, group order $r \approx 2^{512}$, and base field $p \approx 2^{1024}$.
-- **Optimized Field Arithmetic**: Heavily utilizes Montgomery multiplication to bypass expensive large-integer divisions context, ensuring a viable performance-to-security trade-off.
-- **Built-in Signature Schemes**: Complete, thoroughly tested implementations of **Schnorr** and **ECDSA** digital signature algorithms.
+By utilizing a monstrous 1024-bit base field ($p \approx 2^{1024}$) and a 512-bit scalar field ($r \approx 2^{512}$), this library provides an absolute 256-bit symmetric security margin. It is specifically targeted at high-security, long-term, and offline signing environments where extreme attack resistance is prioritized.
+
+## Key Features
+
+### The Library
+- **Pure-Rust 1024-bit BigNum Arithmetic (`U1024`)**: Custom, memory-safe large integer operations over 1024-bit fields, circumventing vulnerabilities inherent in legacy C/C++ implementations.
+- **Novel KSS18 Pairing-Friendly Curve**: Synthesized via an improved Cocks-Pinch algorithm. Features an embedding degree $k=18$.
+- **Optimized Field Arithmetic**: Heavily utilizes Montgomery multiplication to bypass expensive large-integer divisions, ensuring a viable performance-to-security trade-off.
 - **Robust Attack Resistance**:
-  - **Pollard's rho / ECDLP**: Requires $O(2^{256})$ operations (absolute margin against classical computing limits).
-  - **MOV Attack**: The extension field $\mathbb{F}_{p^{18}}$ is a massive 18,432 bits, making index-calculus DLP completely infeasible.
-  - **Anomalous (SSSA) Attack**: Curve cardinality is rigorously checked ($\\#E(\mathbb{F}_p) \neq p$).
-  - **TNFS Attack Resistance**: Ensures NTT-friendly base and scalar fields.
+  - *Pollard's rho*: Requires $O(2^{256})$ operations.
+  - *MOV Attack*: The extension field $\mathbb{F}_{p^{18}}$ is a massive 18,432 bits, making index-calculus DLP unfeasible.
+  - *Anomalous (SSSA)*: Curve cardinality is rigorously mathematically checked ($\#E(\mathbb{F}_p) \neq p$).
+  - *TNFS*: Ensures NTT-friendly base and scalar fields.
 
-## 📐 Mathematical Specifications
+### The CLI Tool (`curve1024-sig`)
+- **GPG-like Interface**: An intuitive command-line interface for managing keys and signing/verifying files.
+- **Multiple Signature Schemes**: Offers drop-in support for both **Schnorr** and **ECDSA** digital signature algorithms out of the box.
+- **File Signatures**: Directly signs files, appending the signature securely to the file with a specific magic footer identifying the schema.
 
-- **Curve Form**: Short Weierstrass ($y^2 \equiv x^3 + b \pmod p$)
-- **Base Field ($p$)**: ~1024 bits
-- **Scalar Field ($r$)**: ~512 bits
-- **Embedding Degree ($k$)**: 18
-- **Security Level**: 256-bit symmetric equivalent (exceeds NIST 128-bit post-2030 standards)
+---
 
-## 🏗️ Architecture
+## Usage
 
-Curve1024 is structured into distinct, decoupled architectural layers:
+### As a Library
 
-1. **`U1024` (Big Integer Layer)**: Underlying memory-safe 1024-bit arithmetic operations.
-2. **`PrimeField` (Field Layer)**: Modulo mathematics utilizing Montgomery space for optimized computations.
-3. **`AffinePoint` (Curve Layer)**: Geometric operations, curve point verification, and scalar multiplication (`Double-and-Add`).
-4. **Signatures**: Mathematical construction of Schnorr and ECDSA schemas.
-5. **`curve1024-sig`**: Integrated Command Line Interface (CLI) for key generation, document signing, and verification.
+Add `curve1024` to your `Cargo.toml` dependencies.
 
-## 🚀 Getting Started
+```rust
+use curve1024::{
+    AffinePoint, Curve1024BaseField, Curve1024Config, EcdsaSignature, KeyPair, 
+    PrimeFieldElement, SchnorrSignature, U1024,
+};
 
-### Prerequisites
-- [Rust toolchain](https://rustup.rs/) (`cargo`, `rustc`)
+fn main() {
+    // 1. Generate a new 1024-bit keypair
+    let keypair = KeyPair::<Curve1024Config>::generate();
+    let message = b"Confidential system payload";
 
-### Build the Project
+    // 2. Sign using Schnorr
+    let schnorr_sig = SchnorrSignature::<Curve1024Config>::sign(&keypair.private_key, message);
+    let schnorr_valid = schnorr_sig.verify(&keypair.public_key, message);
+    assert!(schnorr_valid);
+
+    // 3. Or sign using ECDSA
+    let ecdsa_sig = EcdsaSignature::sign::<Curve1024Config>(&keypair.private_key, message);
+    let ecdsa_valid = ecdsa_sig.verify::<Curve1024Config>(&keypair.public_key, message);
+    assert!(ecdsa_valid);
+}
+```
+
+### The CLI Tool (`curve1024-sig`)
+
+You can install the CLI tool directly from the repository using `cargo install`.
+
 ```bash
-git clone https://github.com/Tranduy1dol/lumen-math.git
-cd lumen-math
+cargo install --git https://github.com/Tranduy1dol/curve1024.git curve1024-sig
+```
+
+Alternatively, you can build it from source:
+```bash
+git clone https://github.com/Tranduy1dol/curve1024.git
+cd curve1024
 cargo build --release
 ```
 
-### Run the Test Suite
-Curve1024 is bundled with an extensive suite of 36 mathematically rigorous test cases, including base arithmetic edge cases and simulated attack analysis (e.g., MOV and Anomalous context checks).
+**CLI Commands Overview:**
 
-```bash
-cargo test
+```text
+A GPG-like tool for elliptic curve key management and digital signatures
+
+Usage: curve1024-sig <COMMAND>
+
+Commands:
+  keygen      
+  sign        
+  verify      
+  export-pub  
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
 ```
 
-*Tip: To evaluate the computationally-heavy benchmarking, you can run `cargo bench`.*
+---
 
 ## 🔒 Security Disclaimer
 
-**Warning & Academic Transparency:**
-While this library achieves high mathematical correctness and effectively neutralizes standard algorithmic attacks, the scalar multiplication algorithm currently leverages a *Double-and-Add* approach. Thus, it **may be vulnerable to timing side-channel attacks**, as execution time correlates with the scalar's Hamming weight. 
-
-Future developments aim to replace this with a constant-time *Montgomery Ladder* and optimize through *Jacobian/Projective constraints*. **Curve1024 is currently best suited for academic demonstrations, secure protocol designs, and offline signing operations.**
+*Warning & Academic Transparency:* While this library achieves high mathematical correctness and effectively neutralizes standard algorithmic attacks, the scalar multiplication algorithm currently leverages a *Double-and-Add* approach. Thus, it **may be vulnerable to timing side-channel attacks**. Curve1024 is currently best suited for academic demonstrations, secure protocol designs, and offline signing operations.
 
 ## 📜 License
-
-This project is open source and strictly licensed under the MIT License.
+This project is open-source and strictly licensed under the MIT License.
