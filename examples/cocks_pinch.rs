@@ -306,6 +306,8 @@ fn combined_readability(p: &U1024, r: &U1024) -> u32 {
 }
 
 fn describe_readability(n: &U1024, name: &str) {
+    let bits = LIMBS * 64;
+    let hex_digits = bits / 4;
     let hw = hamming_weight(n);
     let ta = two_adicity(&n.borrowing_sub(&U1024::ONE).0);
     let zl = zero_limb_count(n);
@@ -314,8 +316,8 @@ fn describe_readability(n: &U1024, name: &str) {
     let rp = repeating_limb_pairs(n);
     let zr = longest_zero_limb_run(n);
     println!(
-        "  {name}: hamming={hw}/1024  two-adicity={ta}  zero_limbs={zl}  \
-         full_limbs={fl}  hex_zeros={hz}/256  repeats={rp}  max_zero_run={zr}"
+        "  {name}: hamming={hw}/{bits}  two-adicity={ta}  zero_limbs={zl}  \
+         full_limbs={fl}  hex_zeros={hz}/{hex_digits}  repeats={rp}  max_zero_run={zr}"
     );
 }
 
