@@ -617,7 +617,11 @@ fn main() {
             .and_then(|v| v.parse().ok())
             .unwrap_or(50);
         println!("Mode: readable (best of {target} successes, {hours}h limit)");
-        (1_000_000u64, target, std::time::Duration::from_secs(hours * 3600))
+        (
+            1_000_000u64,
+            target,
+            std::time::Duration::from_secs(hours * 3600),
+        )
     } else {
         (100_000u64, 1u64, std::time::Duration::from_secs(24 * 3600))
     };

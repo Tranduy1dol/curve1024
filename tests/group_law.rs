@@ -23,7 +23,7 @@ fn test_point_double_equals_add_self() {
 #[test]
 fn test_identity_element() {
     let g = Curve1024Config::generator();
-    let inf = AffinePoint::<Curve1024Config>::infinite();
+    let inf = AffinePoint::<Curve1024Config>::infinity();
     assert_eq!(g.add(&inf), g);
     assert_eq!(inf.add(&g), g);
 }

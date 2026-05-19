@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use subtle::ConditionallySelectable;
 
 use crate::{
-    U1024,
+    ProjectivePoint, U1024,
     prime_field::{PrimeFieldConfig as FieldConfig, PrimeFieldElement as FieldElement},
 };
 
@@ -55,7 +55,7 @@ impl<C: SWCurveConfig> AffinePoint<C> {
         point
     }
 
-    pub fn infinite() -> Self {
+    pub fn infinity() -> Self {
         let zero = FieldElement::<C::BaseField>::zero();
         Self {
             x: zero,
@@ -99,7 +99,7 @@ impl<C: SWCurveConfig> AffinePoint<C> {
             return *self;
         }
         if self.neg() == *rhs {
-            return Self::infinite();
+            return Self::infinity();
         }
 
         if *self == *rhs {
@@ -118,7 +118,7 @@ impl<C: SWCurveConfig> AffinePoint<C> {
 
     pub fn double(&self) -> Self {
         if self.is_infinite || self.y.is_zero() {
-            return Self::infinite();
+            return Self::infinity();
         }
 
         let three = FieldElement::new(U1024::from(3));
@@ -135,18 +135,18 @@ impl<C: SWCurveConfig> AffinePoint<C> {
     }
 
     pub fn mul(&self, scalar: &U1024) -> Self {
-        let mut r0 = Self::infinite();
-        let mut r1 = *self;
+        let mut r0 = ProjectivePoint::<C>::infinity();
+        let mut r1 = ProjectivePoint::<C>::from_affine(self);
 
         for i in (0..1024).rev() {
             let bit = scalar.bit(i) as u8;
-            Self::conditional_swap(&mut r0, &mut r1, bit.into());
+            ProjectivePoint::conditional_swap(&mut r0, &mut r1, bit.into());
             r1 = r0.add(&r1);
             r0 = r0.double();
-            Self::conditional_swap(&mut r0, &mut r1, bit.into());
+            ProjectivePoint::conditional_swap(&mut r0, &mut r1, bit.into());
         }
 
-        r0
+        r0.to_affine()
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
         assert!(generator.is_on_curve());
         assert!(!generator.is_infinite);
 
-        let inf = P::infinite();
+        let inf = P::infinity();
         assert!(inf.is_infinite);
         assert!(inf.is_on_curve());
     }
@@ -243,7 +243,7 @@ mod tests {
         let expected_p2 = P::new(F::new(U1024::from_u64(6)), F::new(U1024::from_u64(3)));
         assert_eq!(p2_double, expected_p2);
 
-        let inf = P::infinite();
+        let inf = P::infinity();
         assert_eq!(p.add(&inf), p);
         assert_eq!(inf.add(&p), p);
         assert_eq!(p.add(&p.neg()), inf);
@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(neg_p.y, -p.y);
         assert!(neg_p.is_on_curve());
 
-        let inf = P::infinite();
+        let inf = P::infinity();
         assert_eq!(inf.neg(), inf);
     }
 }
