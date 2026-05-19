@@ -215,6 +215,112 @@ fn two_adicity(n: &U1024) -> u32 {
     1024
 }
 
+// ── Readability scoring ─────────────────────────────────────────────
+
+fn hamming_weight(n: &U1024) -> u32 {
+    n.0.iter().map(|l| l.count_ones()).sum()
+}
+
+fn zero_limb_count(n: &U1024) -> u32 {
+    n.0.iter().filter(|&&l| l == 0).count() as u32
+}
+
+fn full_limb_count(n: &U1024) -> u32 {
+    n.0.iter().filter(|&&l| l == u64::MAX).count() as u32
+}
+
+fn longest_zero_limb_run(n: &U1024) -> u32 {
+    let (mut best, mut cur) = (0u32, 0u32);
+    for &limb in &n.0 {
+        if limb == 0 {
+            cur += 1;
+            best = best.max(cur);
+        } else {
+            cur = 0;
+        }
+    }
+    best
+}
+
+fn hex_zero_count(n: &U1024) -> u32 {
+    n.0.iter()
+        .map(|&l| (0..16).filter(|&i| (l >> (i * 4)) & 0xF == 0).count() as u32)
+        .sum()
+}
+
+fn repeating_limb_pairs(n: &U1024) -> u32 {
+    (1..LIMBS)
+        .filter(|&i| n.0[i] == n.0[i - 1] && n.0[i] != 0)
+        .count() as u32
+}
+
+/// Multi-criteria readability score for a single prime. Higher = more readable.
+///
+/// Rewards diverse forms of structure:
+///   - Binary sparseness  (low Hamming weight)
+///   - Zero 64-bit limbs  (clean hex blocks)
+///   - All-F limbs        (near power of two)
+///   - Contiguous zero runs (dramatic visual gap)
+///   - Hex zero density   (many 0 nibbles overall)
+///   - Two-adicity bonus  (clean trailing pattern)
+///   - Simple top limb    (clean leading hex)
+///   - Repeating limbs    (visible periodicity)
+fn prime_readability_score(n: &U1024) -> u32 {
+    let mut s = 0u32;
+
+    // 1. Sparse binary — random expects ~512 set bits
+    let hw = hamming_weight(n);
+    s += 512u32.saturating_sub(hw) * 2;
+
+    // 2. Two-adicity of n-1 — already ≥32, reward extra
+    let ta = two_adicity(&n.borrowing_sub(&U1024::ONE).0);
+    s += ta * 3;
+
+    // 3. Entire zero limbs (each clears 16 hex digits)
+    s += zero_limb_count(n) * 60;
+
+    // 4. All-F limbs — the prime is near 2^(64k)
+    s += full_limb_count(n) * 50;
+
+    // 5. Longest contiguous run of zero limbs
+    let run = longest_zero_limb_run(n);
+    if run >= 2 {
+        s += run * 40;
+    }
+
+    // 6. Hex zero density — random expects ~16/256 zeros
+    s += hex_zero_count(n).saturating_sub(16) * 2;
+
+    // 7. Simple top limb — few set bits in leading 64 bits
+    s += 32u32.saturating_sub(n.0[LIMBS - 1].count_ones()) * 3;
+
+    // 8. Repeating adjacent limbs — visual periodicity
+    s += repeating_limb_pairs(n) * 25;
+
+    s
+}
+
+/// Combined readability for both p (weight 1.5×) and r.
+fn combined_readability(p: &U1024, r: &U1024) -> u32 {
+    prime_readability_score(p) * 3 / 2 + prime_readability_score(r)
+}
+
+fn describe_readability(n: &U1024, name: &str) {
+    let bits = LIMBS * 64;
+    let hex_digits = bits / 4;
+    let hw = hamming_weight(n);
+    let ta = two_adicity(&n.borrowing_sub(&U1024::ONE).0);
+    let zl = zero_limb_count(n);
+    let fl = full_limb_count(n);
+    let hz = hex_zero_count(n);
+    let rp = repeating_limb_pairs(n);
+    let zr = longest_zero_limb_run(n);
+    println!(
+        "  {name}: hamming={hw}/{bits}  two-adicity={ta}  zero_limbs={zl}  \
+         full_limbs={fl}  hex_zeros={hz}/{hex_digits}  repeats={rp}  max_zero_run={zr}"
+    );
+}
+
 struct LiftParams<'a> {
     t0: &'a U1024,
     y0: &'a U1024,
@@ -232,6 +338,8 @@ fn try_lift_to_prime(k: u64, d: &U1024, r: &U1024, lp: &LiftParams<'_>) -> Optio
         .saturating_sub(lp.r_two_adicity)
         .min(10);
     let half_range = 20i64 + (1i64 << extra);
+
+    let mut best: Option<(CurveParams, u32)> = None;
 
     for ht in -half_range..=half_range {
         for hy in -half_range..=half_range {
@@ -265,18 +373,24 @@ fn try_lift_to_prime(k: u64, d: &U1024, r: &U1024, lp: &LiftParams<'_>) -> Optio
                 continue;
             }
 
-            return Some(CurveParams {
-                p,
-                r: *r,
-                t,
-                y,
-                k,
-                d: *d,
-            });
+            let score = combined_readability(&p, r);
+            if best.as_ref().map_or(true, |(_, s)| score > *s) {
+                best = Some((
+                    CurveParams {
+                        p,
+                        r: *r,
+                        t,
+                        y,
+                        k,
+                        d: *d,
+                    },
+                    score,
+                ));
+            }
         }
     }
 
-    None
+    best.map(|(params, _)| params)
 }
 
 fn find_t_range(target_bits: usize) -> (U1024, U1024) {
@@ -319,8 +433,11 @@ fn cocks_pinch(
     min_scalar_two_adicity: u32,
     min_base_two_adicity: u32,
     max_attempts: u64,
+    max_successes: u64,
+    time_limit: std::time::Duration,
 ) -> Option<CurveParams> {
     let (t_min, t_max) = find_t_range(target_r_bits);
+    let global_start = std::time::Instant::now();
 
     // r = T^6 - T^3 + 1, so r - 1 = T^3(T^3 - 1).
     // If T ≡ 0 (mod 2^k), then two_adicity(r-1) = 3k.
@@ -338,7 +455,15 @@ fn cocks_pinch(
     };
     let t_steps = t_max.borrowing_sub(&t_base).0.div_rem(&step).0;
 
+    let mut best: Option<(CurveParams, u32)> = None;
+    let mut successes = 0u64;
+
     for attempt in 0..max_attempts {
+        if global_start.elapsed() >= time_limit {
+            println!("\n⏰ Time limit reached after {attempt} attempts.");
+            break;
+        }
+
         let timer = std::time::Instant::now();
 
         // Pick a random multiple of `step` in [t_base, t_max]
@@ -376,6 +501,7 @@ fn cocks_pinch(
 
         let r_field = RuntimeField::new(r);
 
+        let mut found_for_r = false;
         for i in 1..k {
             if gcd(i, k) != 1 {
                 continue;
@@ -397,30 +523,108 @@ fn cocks_pinch(
                     r_two_adicity,
                 },
             ) {
-                println!("[attempt {attempt}] SUCCESS, {:.2?}", timer.elapsed());
-                return Some(params);
+                let score = combined_readability(&params.p, &params.r);
+                successes += 1;
+                found_for_r = true;
+
+                let is_new_best = best.as_ref().map_or(true, |(_, s)| score > *s);
+                if is_new_best {
+                    println!(
+                        "[attempt {attempt}] ★ NEW BEST score={score} ({successes}/{max_successes} found), {:.2?}",
+                        timer.elapsed()
+                    );
+                    describe_readability(&params.p, "p");
+                    describe_readability(&params.r, "r");
+                    best = Some((params, score));
+                } else {
+                    println!(
+                        "[attempt {attempt}] found score={score} (best={}), {:.2?}",
+                        best.as_ref().unwrap().1,
+                        timer.elapsed()
+                    );
+                }
+
+                // In fast mode (max_successes=1), return immediately
+                if successes >= max_successes {
+                    break;
+                }
+                // Only take the best lift per r, then move on
+                break;
             }
         }
 
-        println!(
-            "[attempt {attempt}] lift_to_prime failed, {:.2?}",
-            timer.elapsed()
-        );
+        if successes >= max_successes {
+            break;
+        }
+
+        if !found_for_r {
+            println!(
+                "[attempt {attempt}] lift_to_prime failed, {:.2?}",
+                timer.elapsed()
+            );
+        }
     }
 
-    None
+    best.map(|(params, _)| params)
+}
+
+fn print_result(params: &CurveParams) {
+    let r_adicity = two_adicity(&params.r.borrowing_sub(&U1024::ONE).0);
+    let p_adicity = two_adicity(&params.p.borrowing_sub(&U1024::ONE).0);
+    let score = combined_readability(&params.p, &params.r);
+
+    println!("Found pairing-friendly curve!");
+    println!("  p = {} ({} bits)", params.p, bit_length(&params.p));
+    println!("  p two-adicity: 2^{p_adicity} | (p-1)");
+    println!("  r = {} ({} bits)", params.r, bit_length(&params.r));
+    println!("  r two-adicity: 2^{r_adicity} | (r-1)");
+    println!("  t = {}", params.t);
+    println!("  y = {}", params.y);
+    println!("  k = {}", params.k);
+    println!("  D = {}", params.d);
+    println!("  readability score = {score}");
+    describe_readability(&params.p, "p");
+    describe_readability(&params.r, "r");
 }
 
 fn main() {
-    println!("=== Cocks-Pinch Curve Parameter Generator ===\n");
+    let readable = std::env::args().any(|a| a == "--readable");
+
+    if readable {
+        println!("=== Cocks-Pinch Readable Prime Search ===\n");
+    } else {
+        println!("=== Cocks-Pinch Curve Parameter Generator ===\n");
+    }
 
     let k = 18u64;
     let d = U1024::from(3);
     let target_r_bits = 512;
     let target_p_bits = 1024;
-    let max_attempts = 100_000u64;
     let min_scalar_two_adicity = 32u32;
     let min_base_two_adicity = 32u32;
+
+    // In readable mode: search for many successes within a time budget.
+    // In fast mode: stop at first success.
+    let (max_attempts, max_successes, time_limit) = if readable {
+        let hours: u64 = std::env::args()
+            .skip_while(|a| a != "--hours")
+            .nth(1)
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
+        let target: u64 = std::env::args()
+            .skip_while(|a| a != "--target")
+            .nth(1)
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50);
+        println!("Mode: readable (best of {target} successes, {hours}h limit)");
+        (
+            1_000_000u64,
+            target,
+            std::time::Duration::from_secs(hours * 3600),
+        )
+    } else {
+        (100_000u64, 1u64, std::time::Duration::from_secs(24 * 3600))
+    };
 
     println!("k={k}, D={d}, target: r~{target_r_bits} bits, p~{target_p_bits} bits");
     println!("Scalar field NTT two-adicity >= {min_scalar_two_adicity}");
@@ -437,19 +641,12 @@ fn main() {
         min_scalar_two_adicity,
         min_base_two_adicity,
         max_attempts,
+        max_successes,
+        time_limit,
     ) {
         Some(params) => {
-            let r_adicity = two_adicity(&params.r.borrowing_sub(&U1024::ONE).0);
-            let p_adicity = two_adicity(&params.p.borrowing_sub(&U1024::ONE).0);
-            println!("Found pairing-friendly curve!");
-            println!("  p = {} ({} bits)", params.p, bit_length(&params.p));
-            println!("  p two-adicity: 2^{p_adicity} | (p-1)");
-            println!("  r = {} ({} bits)", params.r, bit_length(&params.r));
-            println!("  r two-adicity: 2^{r_adicity} | (r-1)");
-            println!("  t = {}", params.t);
-            println!("  y = {}", params.y);
-            println!("  k = {}", params.k);
-            println!("  D = {}", params.d);
+            println!("\n============================================================");
+            print_result(&params);
 
             std::fs::write(CONFIG_PATH, params.to_toml()).expect("Failed to write config");
             println!("\nConfig written to {CONFIG_PATH}");

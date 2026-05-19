@@ -13,7 +13,7 @@ By utilizing a monstrous 1024-bit base field ($p \approx 2^{1024}$) and a 512-bi
 
 ### The Library
 - **Pure-Rust 1024-bit BigNum Arithmetic (`U1024`)**: Custom, memory-safe large integer operations over 1024-bit fields, circumventing vulnerabilities inherent in legacy C/C++ implementations.
-- **Novel KSS18 Pairing-Friendly Curve**: Synthesized via an improved Cocks-Pinch algorithm. Features an embedding degree $k=18$.
+- **Pairing-Friendly Curve ($k=18$)**: Synthesized via the Cocks-Pinch method using the 18th cyclotomic polynomial $\Phi_{18}$. Features an embedding degree $k=18$ and NTT-friendly fields with two-adicity 36.
 - **Optimized Field Arithmetic**: Heavily utilizes Montgomery multiplication to bypass expensive large-integer divisions, ensuring a viable performance-to-security trade-off.
 - **Robust Attack Resistance**:
   - *Pollard's rho*: Requires $O(2^{256})$ operations.
@@ -92,9 +92,41 @@ Options:
 
 ---
 
-## 🔒 Security Disclaimer
+## Curve Parameters
+
+### Derivation
+
+Let $T = \texttt{0x26704d2ace0facdd539} \cdot 2^{12}$ (an 86-bit seed).
+
+The **scalar field order** is defined by the 18th cyclotomic polynomial:
+$$r = \Phi_{18}(T) = T^6 - T^3 + 1$$
+
+The **base field prime** is derived via the CM norm equation with discriminant $D=3$:
+$$p = \frac{t^2 + D \cdot y^2}{4}$$
+
+The curve equation is $E: y^2 = x^3 + 41$ over $\mathbb{F}_p$.
+
+### Properties
+
+| Parameter | Value |
+|---|---|
+| Base field $p$ | 1024 bits |
+| Scalar field $r$ | 512 bits |
+| Symmetric security | 256 bits |
+| Embedding degree $k$ | 18 |
+| Extension field $\mathbb{F}_{p^{18}}$ | 18,432 bits |
+| Curve equation | $y^2 = x^3 + 41$ |
+| CM discriminant $D$ | 3 |
+| Two-adicity of $p-1$ | 36 |
+| Two-adicity of $r-1$ | 36 |
+
+Both fields satisfy $p \equiv r \equiv 1 \pmod{2^{36}}$, enabling NTT of length up to $2^{36}$. See [`docs/parameter_generation.md`](docs/parameter_generation.md) for the full generation methodology.
+
+---
+
+## Security Disclaimer
 
 *Warning & Academic Transparency:* While this library achieves high mathematical correctness and effectively neutralizes standard algorithmic attacks, the scalar multiplication algorithm currently leverages a *Double-and-Add* approach. Thus, it **may be vulnerable to timing side-channel attacks**. Curve1024 is currently best suited for academic demonstrations, secure protocol designs, and offline signing operations.
 
-## 📜 License
+## License
 This project is open-source and strictly licensed under the MIT License.
