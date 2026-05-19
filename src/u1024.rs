@@ -224,7 +224,7 @@ impl U1024 {
         Self(result)
     }
 
-    fn bit(&self, index: usize) -> bool {
+    pub fn bit(&self, index: usize) -> bool {
         if index >= 1024 {
             return false;
         }

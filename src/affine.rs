@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use subtle::ConditionallySelectable;
+
 use crate::{
     U1024,
     prime_field::{PrimeFieldConfig as FieldConfig, PrimeFieldElement as FieldElement},
@@ -133,19 +135,31 @@ impl<C: SWCurveConfig> AffinePoint<C> {
     }
 
     pub fn mul(&self, scalar: &U1024) -> Self {
-        let mut result = Self::infinite();
-        let mut base = *self;
+        let mut r0 = Self::infinite();
+        let mut r1 = *self;
 
-        for i in 0..1024 {
-            let limb_idx = i / 64;
-            let bit_idx = i % 64;
-            if (scalar.0[limb_idx] >> bit_idx) & 1 == 1 {
-                result = result.add(&base);
-            }
-            base = base.double();
+        for i in (0..1024).rev() {
+            let bit = scalar.bit(i) as u8;
+            Self::conditional_swap(&mut r0, &mut r1, bit.into());
+            r1 = r0.add(&r1);
+            r0 = r0.double();
+            Self::conditional_swap(&mut r0, &mut r1, bit.into());
         }
 
-        result
+        r0
+    }
+}
+
+impl<C: SWCurveConfig> ConditionallySelectable for AffinePoint<C> {
+    fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+        let a_inf = a.is_infinite as u8;
+        let b_inf = b.is_infinite as u8;
+        Self {
+            x: FieldElement::conditional_select(&a.x, &b.x, choice),
+            y: FieldElement::conditional_select(&a.y, &b.y, choice),
+            is_infinite: u8::conditional_select(&a_inf, &b_inf, choice) != 0,
+            _config: PhantomData,
+        }
     }
 }
 
