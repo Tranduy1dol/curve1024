@@ -13,13 +13,14 @@ By utilizing a monstrous 1024-bit base field ($p \approx 2^{1024}$) and a 512-bi
 
 ### The Library
 - **Pure-Rust 1024-bit BigNum Arithmetic (`U1024`)**: Custom, memory-safe large integer operations over 1024-bit fields, circumventing vulnerabilities inherent in legacy C/C++ implementations.
-- **Novel KSS18 Pairing-Friendly Curve**: Synthesized via an improved Cocks-Pinch algorithm. Features an embedding degree $k=18$.
+- **1024-bit Elliptic Curve**: Pre-computed curve parameters with CM discriminant D=−3, embedding degree k=18, and a 512-bit scalar field providing 256-bit symmetric security.
 - **Optimized Field Arithmetic**: Heavily utilizes Montgomery multiplication to bypass expensive large-integer divisions, ensuring a viable performance-to-security trade-off.
+- **Complex Multiplication (CM)**: Constructs the curve equation and generator point from CM parameters using Hilbert class polynomials, sextic twist enumeration, and cofactor clearing.
+- **Cross-validated with BLS12-381**: Library correctness is independently verified against the well-known [zkcrypto/bls12_381](https://github.com/zkcrypto/bls12_381) test vectors.
 - **Robust Attack Resistance**:
   - *Pollard's rho*: Requires $O(2^{256})$ operations.
-  - *MOV Attack*: The extension field $\mathbb{F}_{p^{18}}$ is a massive 18,432 bits, making index-calculus DLP unfeasible.
-  - *Anomalous (SSSA)*: Curve cardinality is rigorously mathematically checked ($\#E(\mathbb{F}_p) \neq p$).
-  - *TNFS*: Ensures NTT-friendly base and scalar fields.
+  - *MOV Attack*: The extension field $\mathbb{F}_{p^{18}}$ is a massive 18,432 bits, making index-calculus DLP infeasible.
+  - *Anomalous (SSSA)*: Curve cardinality is rigorously checked ($\#E(\mathbb{F}_p) \neq p$).
 
 ### The CLI Tool (`curve1024-sig`)
 - **GPG-like Interface**: An intuitive command-line interface for managing keys and signing/verifying files.

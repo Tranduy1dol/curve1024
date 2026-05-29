@@ -32,7 +32,7 @@ struct CurveConfig {
 
 fn read_config() -> CurveConfig {
     let content = std::fs::read_to_string(CONFIG_PATH)
-        .expect("Run cocks_pinch example first to generate config");
+        .expect("config/curve1024.toml not found");
     let file: ConfigFile = toml::from_str(&content).expect("Failed to parse TOML");
     CurveConfig {
         p: U1024::from_hex(&file.field.modulus),
